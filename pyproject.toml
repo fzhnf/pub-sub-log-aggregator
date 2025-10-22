@@ -1,0 +1,16 @@
+[project]
+name = "pub-sub-log-aggregator"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "aiosqlite>=0.21.0",
+    "fastapi[standard-no-fastapi-cloud-cli]>=0.119.1",
+    "pydantic>=2.12.3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+]
