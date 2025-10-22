@@ -5,12 +5,10 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "aiosqlite>=0.21.0",
-    "fastapi[standard-no-fastapi-cloud-cli]>=0.119.1",
-    "pydantic>=2.12.3",
+  "aiosqlite>=0.21.0",
+  "fastapi[standard-no-fastapi-cloud-cli]>=0.119.1",
+  "pydantic>=2.12.3",
 ]
 
 [dependency-groups]
-dev = [
-    "pytest>=8.4.2",
-]
+dev = ["httpx>=0.28.1", "pytest>=8.4.2", "pytest-asyncio>=1.2.0"]
