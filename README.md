@@ -29,12 +29,12 @@ diproses sekali
 │  │  asyncio.Queue       │   │
 │  │  (In-memory buffer)  │   │
 │  └──────────┬───────────┘   │
-│             ▼              │
+│             ▼               │
 │  ┌──────────────────────┐   │
 │  │  Consumer Worker     │   │
 │  │  (Idempotent)        │   │
 │  └──────────┬───────────┘   │
-│             ▼              │
+│             ▼               │
 │  ┌──────────────────────┐   │
 │  │  DedupStore (SQLite) │   │
 │  │  - processed_events  │   │
