@@ -3,13 +3,20 @@ Unit tests for deduplication store
 Tests core idempotency and persistence logic
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import pytest
+
+if TYPE_CHECKING:
+    from dedup_store import DedupStore
 
 from dedup_store import DedupStore
 
 
 @pytest.mark.asyncio
-async def test_dedup_new_event(test_db):
+async def test_dedup_new_event(test_db: DedupStore):
     """
     Test 1: New event is NOT a duplicate
 
@@ -32,7 +39,7 @@ async def test_dedup_new_event(test_db):
 
 
 @pytest.mark.asyncio
-async def test_dedup_duplicate_event(test_db):
+async def test_dedup_duplicate_event(test_db: DedupStore):
     """
     Test 2: Duplicate event is correctly detected
 
@@ -55,7 +62,7 @@ async def test_dedup_duplicate_event(test_db):
 
 
 @pytest.mark.asyncio
-async def test_dedup_different_topics(test_db):
+async def test_dedup_different_topics(test_db: DedupStore):
     """
     Test 3: Same event_id in different topics are NOT duplicates
 
@@ -81,7 +88,7 @@ async def test_dedup_different_topics(test_db):
 
 
 @pytest.mark.asyncio
-async def test_dedup_persistence_after_reconnect(test_db):
+async def test_dedup_persistence_after_reconnect(test_db: DedupStore):
     """
     Test 4: Dedup store survives database reconnect
 
@@ -113,7 +120,7 @@ async def test_dedup_persistence_after_reconnect(test_db):
 
 
 @pytest.mark.asyncio
-async def test_event_payload_storage(test_db):
+async def test_event_payload_storage(test_db: DedupStore):
     """
     Test 5: Full event payloads are stored and retrievable
 
@@ -132,7 +139,7 @@ async def test_event_payload_storage(test_db):
     )
 
     # Act - Store event
-    await test_db.check_and_mark(event.topic, event.event_id)
+    _ = await test_db.check_and_mark(event.topic, event.event_id)
     await test_db.store_event_payload(event)
 
     # Retrieve events
@@ -148,7 +155,7 @@ async def test_event_payload_storage(test_db):
 
 
 @pytest.mark.asyncio
-async def test_stats_counters_persistence(test_db):
+async def test_stats_counters_persistence(test_db: DedupStore):
     """
     Test 6: Stats counters persist across restarts
 
