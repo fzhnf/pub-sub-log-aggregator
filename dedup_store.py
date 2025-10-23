@@ -3,6 +3,7 @@ Deduplication Store for Pub-Sub Log Aggregator
 File-based SQLite for persistence across container restarts
 """
 
+from contextlib import asynccontextmanager
 import json
 import logging
 from datetime import datetime, timezone
@@ -87,18 +88,23 @@ class DedupStore:
 
         # New stats table
         _ = await self._conn.execute("""
-        CREATE TABLE IF NOT EXISTS system_stats (
-            key TEXT PRIMARY KEY,
-            value INTEGER NOT NULL
-        )
-    """)
+            CREATE TABLE IF NOT EXISTS system_stats (
+                key TEXT PRIMARY KEY,
+                value INTEGER NOT NULL
+            )
+        """)
 
         # Initialize counters if not exist
         _ = await self._conn.execute("""
-        INSERT OR IGNORE INTO system_stats (key, value) VALUES 
-        ('received', 0),
-        ('duplicate_dropped', 0)
-    """)
+            INSERT OR IGNORE INTO system_stats (key, value) VALUES 
+            ('received', 0),
+            ('duplicate_dropped', 0)
+        """)
+
+        _ = await self._conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_processed_events_topic 
+            ON processed_events(topic)
+        """)
 
         await self._conn.commit()
         logger.info("DedupStore schema initialized")
@@ -108,6 +114,21 @@ class DedupStore:
         if self._conn:
             await self._conn.close()
             logger.info("DedupStore closed")
+
+    @asynccontextmanager
+    async def transaction(self):
+        """Proper transaction context manager"""
+        if self._conn is None:
+            raise RuntimeError("Database not initialized")
+
+        # Start transaction
+        _ = await self._conn.execute("BEGIN")
+        try:
+            yield
+            await self._conn.commit()
+        except Exception:
+            await self._conn.rollback()
+            raise
 
     async def store_event_payload(self, stored_event: StoredEvent) -> None:
         """Store full event payload in database"""
@@ -246,6 +267,18 @@ class DedupStore:
             # Should not happen due to INSERT OR IGNORE, but handle defensively
             logger.error(f"Integrity error marking processed: {e}")
             return False
+
+    async def mark_processed_batch(self, events: list[tuple[str, str]]) -> int:
+        """Batch mark events as processed - much faster for 5000+ events"""
+        assert self._conn is not None
+        first_seen_at = datetime.now(timezone.utc).isoformat()
+        values = [(topic, event_id, first_seen_at) for topic, event_id in events]
+
+        cursor = await self._conn.executemany(
+            "INSERT OR IGNORE INTO processed_events VALUES (?, ?, ?)", values
+        )
+        await self._conn.commit()
+        return cursor.rowcount
 
     async def check_and_mark(self, topic: str, event_id: str) -> bool:
         assert self._conn is not None
@@ -388,3 +421,28 @@ class DedupStore:
         row = await cursor.fetchone()
         await cursor.close()
         return row[0] if row else 0
+
+    async def recover_orphaned_events(self):
+        assert self._conn is not None
+        """Recover events that were in process during crash"""
+        # Find events marked as processed but missing payloads
+        cursor = await self._conn.execute("""
+            SELECT pe.topic, pe.event_id, pe.first_seen_at 
+            FROM processed_events pe
+            LEFT JOIN event_payloads ep ON pe.topic = ep.topic AND pe.event_id = ep.event_id
+            WHERE ep.topic IS NULL
+        """)
+        rows: list[tuple[str, str, str]] = cast(
+            list[tuple[str, str, str]], await cursor.fetchall()
+        )
+        await cursor.close()
+
+        if rows:
+            logger.warning(f"Found {len(rows)} orphaned events, cleaning...")
+            # Remove orphaned dedup records to allow reprocessing
+            for topic, event_id, _ in rows:
+                _ = await self._conn.execute(
+                    "DELETE FROM processed_events WHERE topic = ? AND event_id = ?",
+                    (topic, event_id),
+                )
+            await self._conn.commit()
