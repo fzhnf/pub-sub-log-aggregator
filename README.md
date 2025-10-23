@@ -181,7 +181,7 @@ docker run --rm -p 8080:8080 -v $(pwd)/data:/app/data pub-sub-aggregator
 
 ---
 
-## 🐙 Docker Compose (Bonus, +10%)
+## 🐙 Docker Compose
 
 ```bash
 # Jalankan publisher & aggregator terpisah
