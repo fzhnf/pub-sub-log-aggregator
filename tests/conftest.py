@@ -1,7 +1,11 @@
+# pyright:reportExplicitAny=false
+
+from __future__ import annotations
+
 import asyncio
 import tempfile
 from pathlib import Path
-from contextlib import asynccontextmanager
+from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -64,8 +68,7 @@ def sample_event():
 
 
 @pytest.fixture
-def sample_batch(sample_event):
-    """Sample batch of events"""
+def sample_batch(sample_event: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     return {
         "events": [
             sample_event,
