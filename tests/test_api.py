@@ -2,14 +2,25 @@
 Integration tests for FastAPI endpoints
 Tests HTTP API behavior and end-to-end flows
 """
+# pyright: reportExplicitAny=false
+# pyright: reportAny=false
+
+from __future__ import annotations
 
 import asyncio
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
+if TYPE_CHECKING:
+    from httpx import AsyncClient
+
 
 @pytest.mark.asyncio
-async def test_publish_single_event(test_client, sample_event):
+async def test_publish_single_event(
+    test_client: AsyncClient,
+    sample_event: dict[str, Any],
+):
     """
     Test 7: POST /publish accepts single event
 
@@ -36,7 +47,9 @@ async def test_publish_single_event(test_client, sample_event):
 
 
 @pytest.mark.asyncio
-async def test_publish_batch_events(test_client, sample_batch):
+async def test_publish_batch_events(
+    test_client: AsyncClient, sample_batch: dict[str, list[dict[str, Any]]]
+):
     """
     Test 8: POST /publish accepts batch of events
 
@@ -61,7 +74,9 @@ async def test_publish_batch_events(test_client, sample_batch):
 
 
 @pytest.mark.asyncio
-async def test_duplicate_detection_via_api(test_client, sample_event):
+async def test_duplicate_detection_via_api(
+    test_client: AsyncClient, sample_event: dict[str, Any]
+):
     """
     Test 9: End-to-end duplicate detection through API
 
@@ -103,7 +118,9 @@ async def test_duplicate_detection_via_api(test_client, sample_event):
 
 
 @pytest.mark.asyncio
-async def test_get_events_endpoint(test_client, sample_event):
+async def test_get_events_endpoint(
+    test_client: AsyncClient, sample_event: dict[str, Any]
+):
     """
     Test 10: GET /events returns processed events
 
@@ -111,7 +128,7 @@ async def test_get_events_endpoint(test_client, sample_event):
     Verifies: Event retrieval, filtering, pagination
     """
     # Arrange - Publish event
-    await test_client.post("/publish", json={"events": [sample_event]})
+    _ = await test_client.post("/publish", json={"events": [sample_event]})
     await asyncio.sleep(0.1)  # Wait for processing
 
     # Act - Get all events
