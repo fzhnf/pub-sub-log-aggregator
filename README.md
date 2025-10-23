@@ -17,12 +17,12 @@ diproses sekali
 ### Komponen Utama
 
 ```diagram
-┌─────────────┐
-│   Client    │
-│  (Publisher)│
-└──────┬──────┘
-    │ HTTP POST /publish
-       ▼
+        ┌─────────────┐
+        │   Client    │
+        │  (Publisher)│
+        └──────┬──────┘
+               │ HTTP POST /publish
+              ▼
 ┌─────────────────────────────┐
 │    FastAPI Application      │
 │  ┌──────────────────────┐   │
