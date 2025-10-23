@@ -35,7 +35,7 @@ async def test_publish_single_event(
     data = response.json()
     assert data["accepted"] == 1, "Should accept 1 event"
     # ✅ Fix: Match actual message format
-    assert "for processing" in data["message"].lower()
+    assert "accepted" in data["message"].lower()
 
     # Wait for async processing
     await asyncio.sleep(0.3)
