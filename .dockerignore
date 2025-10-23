@@ -1,0 +1,18 @@
+# ---- same as gitignore ----
+.venv/
+__pycache__/
+*.pyc
+dist/
+*.egg-info/
+data/
+
+# ---- extra stuff you never need in the image ----
+*.md
+.pytest_cache/
+.coverage
+htmlcov/
+.vscode/
+.idea/
+*.swp
+*.swo
+tests/          
