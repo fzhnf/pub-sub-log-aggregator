@@ -12,7 +12,25 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from dedup_store import DedupStore
-from main import app
+
+
+DB_PATH = Path("data/dedup.db")
+
+
+@pytest.fixture(autouse=True)
+def clean_production_db():
+    """
+    Clean production database before each test to ensure test isolation.
+    This is needed because the main app uses a global database path.
+    """
+    if DB_PATH.exists():
+        DB_PATH.unlink()
+    # Also ensure the directory exists
+    DB_PATH.parent.mkdir(exist_ok=True)
+    yield
+    # clean up after test
+    if DB_PATH.exists():
+        DB_PATH.unlink()
 
 
 @pytest.fixture(scope="session")
@@ -40,19 +58,18 @@ async def test_db():
 @pytest_asyncio.fixture
 async def test_client():
     """
-    FastAPI test client with manual lifespan trigger.
+    Fixed test client - don't use lifespan_context which causes thread issues
     """
-    # ✅ Manually trigger lifespan startup
-    async with app.router.lifespan_context(app):
-        # Now create client
+    # Create fresh app instance for each test
+    from main import app, lifespan
+
+    # Manually run lifespan
+    async with lifespan(app):
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test", timeout=10.0
         ) as client:
-            # Give consumer worker time to start
-            await asyncio.sleep(0.1)
-
+            await asyncio.sleep(0.1)  # Let consumer start
             yield client
-            # Lifespan shutdown happens automatically when exiting context
 
 
 @pytest.fixture
