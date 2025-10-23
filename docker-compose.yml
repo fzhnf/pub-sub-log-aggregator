@@ -1,16 +1,12 @@
-version: '3.8'
+version: '3.9'
 
 services:
-  # Main aggregator service
   aggregator:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: .
     container_name: pub-sub-aggregator
     ports:
       - "8080:8080"
     volumes:
-      # Persist database across container restarts
       - ./data:/app/data
     environment:
       - DEDUP_DB_PATH=/app/data/dedup.db
@@ -20,11 +16,12 @@ services:
       timeout: 3s
       retries: 3
       start_period: 5s
+    stop_grace_period: 10s
+    restart: unless-stopped
     networks:
       - aggregator-network
-    restart: unless-stopped
 
-  # Publisher service (sends events to aggregator)
+  
   publisher:
     build:
       context: .
@@ -37,9 +34,9 @@ services:
       - AGGREGATOR_URL=http://aggregator:8080
     networks:
       - aggregator-network
-    restart: "no"  # Run once and exit
+    profiles: ["tools"]
+    restart: "no"
 
 networks:
   aggregator-network:
     driver: bridge
-    internal: false  # Allow external access for testing
