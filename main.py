@@ -20,6 +20,8 @@ from models import (
     SystemStats,
 )
 
+MAX_PROCESSED_EVENTS = 10000  # Prevent unlimited memory growth
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -42,10 +44,6 @@ start_time = time.time()
 async def lifespan(_: FastAPI):
     """Application lifecycle management."""
     global dedup_store, event_queue, processed_events
-
-    # Startup
-    logger.info("Starting Pub-Sub Log Aggregator...")
-
     dedup_store = DedupStore("data/dedup.db")
     await dedup_store.initialize()
 
@@ -80,27 +78,30 @@ app = FastAPI(
 
 
 async def consumer_worker():
-    """Background worker that consumes events from queue."""
+    """Background worker with proper error handling"""
     logger.info("Consumer worker running")
 
     while True:
         try:
             event = await event_queue.get()
 
-            # Idempotent check (atomic DB operation)
+            # Use atomic check_and_mark without separate transaction
             is_new = await dedup_store.check_and_mark(event.topic, event.event_id)
 
             if is_new:
                 # Store event payload
                 stored_event = StoredEvent.from_event(event)
                 await dedup_store.store_event_payload(stored_event)
+
+                # Add to in-memory list with size limit
                 processed_events.append(stored_event)
+                if len(processed_events) > MAX_PROCESSED_EVENTS:
+                    del processed_events[: len(processed_events) - MAX_PROCESSED_EVENTS]
 
-                logger.info(f"Processed: {event.topic}:{event.event_id}")
+                logger.debug(f"Processed: {event.topic}:{event.event_id}")
             else:
-                # Duplicate - increment counter
+                # This is where duplicates should be counted
                 await dedup_store.increment_duplicate_dropped()
-
                 logger.warning(f"Duplicate: {event.topic}:{event.event_id}")
 
             event_queue.task_done()
@@ -109,48 +110,37 @@ async def consumer_worker():
             logger.info("Consumer worker cancelled")
             break
         except Exception as e:
-            logger.error(f"Error in consumer: {e}", exc_info=True)
+            logger.error(f"Consumer error: {e}")
+            event_queue.task_done()  # Important: don't block the queue
+            await asyncio.sleep(0.1)
 
 
 @app.post("/publish", response_model=PublishResponse, status_code=202)
 async def publish_events(batch: EventBatch):
     """
-    POST /publish - Accept events for processing
-
-    Accepts single event or batch (up to 1000 events).
-    Events are validated by Pydantic and queued for async processing.
-
-    Returns 202 Accepted (events queued, not yet processed).
-    Returns 400 Bad Request if validation fails (any event in batch).
-    Returns 503 Service Unavailable if queue is full.
+    Fixed version: Don't check for duplicates before queueing
+    This causes race conditions. Let the consumer handle deduplication.
     """
-    try:
-        accepted = 0
+    accepted = 0
 
-        for event in batch.events:
-            try:
-                # Add to queue (non-blocking with timeout)
-                await asyncio.wait_for(event_queue.put(event), timeout=5.0)
-                accepted += 1
+    for event in batch.events:
+        try:
+            # Always increment received counter
+            await dedup_store.increment_received()
 
-                # ✅ Persist to DB instead of in-memory
-                await dedup_store.increment_received()
+            # Always try to queue the event
+            await asyncio.wait_for(event_queue.put(event), timeout=5.0)
+            accepted += 1
 
-            except asyncio.TimeoutError:
-                logger.error("Queue full - rejecting events")
-                raise HTTPException(
-                    status_code=503, detail="Event queue full - system overloaded"
-                )
+        except asyncio.TimeoutError:
+            raise HTTPException(503, "Queue full")
+        except Exception as e:
+            logger.error(f"Error queueing event: {e}")
+            # Continue with other events even if one fails
 
-        logger.info(f"Accepted {accepted} events for processing")
-
-        return PublishResponse(
-            accepted=accepted, message=f"Accepted {accepted} events for processing"
-        )
-
-    except Exception as e:
-        logger.error(f"Error in /publish: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return PublishResponse(
+        accepted=accepted, message=f"Accepted {accepted} events for processing"
+    )
 
 
 @app.get("/events", response_model=EventQueryResponse)
