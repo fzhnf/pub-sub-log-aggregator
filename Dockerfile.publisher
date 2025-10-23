@@ -1,0 +1,12 @@
+FROM python:3.13-slim
+
+WORKDIR /app
+
+# Install httpx for making requests
+RUN pip install --no-cache-dir httpx
+
+# Copy publisher script
+COPY scripts/publisher.py ./
+
+# Run publisher
+CMD ["python", "publisher.py"]
