@@ -148,7 +148,8 @@ async def get_events(topic: str | None = None, limit: int = 100):
     """
     GET /events?topic=<topic>&limit=<limit>
 
-    Returns list of processed events, optionally filtered by topic.
+    Returns list of processed events SORTED BY TIMESTAMP DESC (newest first),
+    optionally filtered by topic.
 
     Query parameters:
     - topic: Filter by topic name (optional)
@@ -163,16 +164,22 @@ async def get_events(topic: str | None = None, limit: int = 100):
         if topic:
             # Filter by topic
             filtered = [e for e in processed_events if e.topic == topic]
+
+            # SORT BY TIMESTAMP DESC (newest first)
+            filtered = sorted(filtered, key=lambda e: e.timestamp, reverse=True)
             filtered = filtered[:limit]
 
             return EventQueryResponse(
                 topic=topic,
                 total=len(filtered),
-                events=[dict(e.to_api_dict()) for e in filtered],  # cast to plain dict
+                events=[dict(e.to_api_dict()) for e in filtered],
             )
         else:
-            # Return all events (up to limit)
-            events_slice = processed_events[:limit]
+            # Sort ALL events by timestamp DESC
+            events_slice = sorted(
+                processed_events, key=lambda e: e.timestamp, reverse=True
+            )
+            events_slice = events_slice[:limit]
 
             return EventQueryResponse(
                 topic=None,
