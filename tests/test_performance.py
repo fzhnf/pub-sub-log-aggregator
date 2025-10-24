@@ -9,6 +9,38 @@ import pytest
 
 
 @pytest.mark.asyncio
+async def test_at_least_once_retry_simulation(test_client: AsyncClient):
+    """
+    True at-least-once simulation: Send same HTTP request 3x
+    Proves idempotency under network retries
+    """
+    event_batch = {
+        "events": [
+            {
+                "topic": "test.retry",
+                "event_id": "retry-event-001",  # Same ID
+                "timestamp": "2025-10-23T10:00:00Z",
+                "source": "test",
+                "payload": {"data": "test"},
+            }
+        ]
+    }
+
+    # Simulate 3 retries
+    for attempt in range(3):
+        response = await test_client.post("/publish", json=event_batch)
+        assert response.status_code == 202
+
+    await asyncio.sleep(0.2)
+
+    # Verify only processed once
+    stats = (await test_client.get("/stats")).json()
+    assert stats["received"] == 3, "All 3 requests received"
+    assert stats["unique_processed"] == 1, "Only 1 processed"
+    assert stats["duplicate_dropped"] == 2, "2 dropped as duplicate"
+
+
+@pytest.mark.asyncio
 async def test_concurrent_publish_stress_5000_events(test_client: AsyncClient):
     """
     Test 12: Concurrent publishers sending 5000 events (at-least-once simulation)

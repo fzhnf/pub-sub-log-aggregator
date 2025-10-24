@@ -151,3 +151,66 @@ async def test_get_events_endpoint(
     topic_data = topic_response.json()
     assert topic_data["topic"] == sample_event["topic"]
     assert topic_data["total"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_get_events_sorted_by_timestamp(test_client: AsyncClient):
+    """
+    Test 11: GET /events returns events sorted by timestamp DESC
+
+    Requirement: T5 (ordering - events sorted for analysis)
+    Verifies: Timestamp ordering, not insertion order
+
+    This proves the claim in Section 2.5.3:
+    "Events sorted by timestamp DESC per-topic"
+    """
+    # Publish 3 events with INTENTIONAL out-of-order timestamps
+    events = [
+        {
+            "topic": "test.ordering",
+            "event_id": "event-newest",
+            "timestamp": "2025-10-23T10:00:03Z",  # Should be first
+            "source": "source-a",
+            "payload": {"sequence": 3},
+        },
+        {
+            "topic": "test.ordering",
+            "event_id": "event-oldest",
+            "timestamp": "2025-10-23T10:00:01Z",  # Should be last (arrives second)
+            "source": "source-b",
+            "payload": {"sequence": 1},
+        },
+        {
+            "topic": "test.ordering",
+            "event_id": "event-middle",
+            "timestamp": "2025-10-23T10:00:02Z",  # Should be middle
+            "source": "source-c",
+            "payload": {"sequence": 2},
+        },
+    ]
+
+    # Publish in non-timestamp order: newest, oldest, middle
+    for event in events:
+        response = await test_client.post("/publish", json={"events": [event]})
+        assert response.status_code == 202
+
+    await asyncio.sleep(0.2)  # Wait for processing
+
+    # GET /events and verify sorting by timestamp DESC
+    response = await test_client.get("/events?topic=test.ordering&limit=10")
+    assert response.status_code == 200
+
+    result = response.json()
+    returned_events = result["events"]
+
+    # Assert correct timestamp order (DESC = newest first)
+    assert len(returned_events) == 3, "Should return all 3 events"
+    assert returned_events[0]["event_id"] == "event-newest", "Newest should be first"
+    assert returned_events[1]["event_id"] == "event-middle", "Middle should be second"
+    assert returned_events[2]["event_id"] == "event-oldest", "Oldest should be last"
+
+    # Verify timestamps are actually in DESC order
+    ts0 = returned_events[0]["timestamp"]
+    ts1 = returned_events[1]["timestamp"]
+    ts2 = returned_events[2]["timestamp"]
+    assert ts0 > ts1 > ts2, f"Timestamps not in DESC order: {ts0}, {ts1}, {ts2}"
